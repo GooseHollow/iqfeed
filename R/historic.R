@@ -60,46 +60,52 @@
   con <- .iqEnv$con["historic"][[1]]
   if(.iqBlock(con,write=FALSE)==FALSE) return(NULL)
   dat <- tryCatch(readBin(con, 'raw', n=65536), error=function(e) warning(e))
-  rlen <- 50
-  j <- 1
-  r <- vector('list',rlen)
-  r[j] <- list(dat)
-  if(grepl("!ENDMSG!", rawToChar(dat), useBytes=TRUE)) dat <- NULL
-  while(length(dat)>0) {
-    if(.iqBlock(con,write=FALSE)==FALSE) return(NULL)
-    dat <- tryCatch(readBin(con, 'raw', n=65536), error=function(e) warning(e))
-    j <- j + 1
-    if(j>rlen) {
-      rlen <- 2*rlen
-      length(r) <- rlen
-    }
-    r[j] <- list(dat)
-    if(grepl("!ENDMSG!", rawToChar(dat), useBytes=TRUE)) dat <- NULL
+  if(substring(rawToChar(dat),first=1,last=1)=="E") {
+	.iqClose("historic")
+	emsg <- unlist(strsplit(substring(rawToChar(dat),first=3),"\r\n"))
+	list(status=FALSE,data=emsg[!grepl("!ENDMSG!",emsg)])
+  } else {
+	rlen <- 50
+  	j <- 1
+  	r <- vector('list',rlen)
+  	r[j] <- list(dat)
+  	if(grepl("!ENDMSG!", rawToChar(dat), useBytes=TRUE)) dat <- NULL
+	while(length(dat)>0) {
+  	  if(.iqBlock(con,write=FALSE)==FALSE) return(NULL)
+  	  dat <- tryCatch(readBin(con, 'raw', n=65536), error=function(e) warning(e))
+  	  j <- j + 1
+  	  if(j>rlen) {
+  	    rlen <- 2*rlen
+  	    length(r) <- rlen
+  	  }
+  	  r[j] <- list(dat)
+  	  if(grepl("!ENDMSG!", rawToChar(dat), useBytes=TRUE)) dat <- NULL
+  	}
+  	.iqClose("historic")
+  	z <- NULL
+  	tryCatch({
+  	  r <- do.call(c,r)
+  	  r <- rawToChar(r)
+  	  r <- unlist(strsplit(r,"\r\n"))
+  	  r <- r[r!="!ENDMSG!,"]
+  	  y <- strsplit(r,',')
+  	  z <- t(as.data.frame(y,stringsAsFactors=FALSE))
+  	  rownames(z) <- NULL
+  	  z <- as.data.frame(z,stringsAsFactors=FALSE)
+  	  z[,1] <- as.POSIXct(z[,1],tz=tz)
+  	  z[,2] <- as.numeric(z[,2])
+  	  z[,3] <- as.numeric(z[,3])
+  	  z[,4] <- as.numeric(z[,4])
+  	  z[,5] <- as.numeric(z[,5])
+  	  z[,6] <- as.numeric(z[,volcol])
+  	  z <- z[,1:6]
+  	  if(ncol(z)==6) {
+  	    colnames(z)<-c("Date","High","Low","Open","Close","Volume")
+  	    z <- xts(z[,2:6],order.by=z[,1])
+  	  }
+  	},error=function(e) warning(e))
+  	list(status=TRUE,data=z)
   }
-  .iqClose("historic")
-  z <- NULL
-  tryCatch({
-    r <- do.call(c,r)
-    r <- rawToChar(r)
-    r <- unlist(strsplit(r,"\r\n"))
-    r <- r[r!="!ENDMSG!,"]
-    y <- strsplit(r,',')
-    z <- t(as.data.frame(y,stringsAsFactors=FALSE))
-    rownames(z) <- NULL
-    z <- as.data.frame(z,stringsAsFactors=FALSE)
-    z[,1] <- as.POSIXct(z[,1],tz=tz)
-    z[,2] <- as.numeric(z[,2])
-    z[,3] <- as.numeric(z[,3])
-    z[,4] <- as.numeric(z[,4])
-    z[,5] <- as.numeric(z[,5])
-    z[,6] <- as.numeric(z[,volcol])
-    z <- z[,1:6]
-    if(ncol(z)==6) {
-      colnames(z)<-c("Date","High","Low","Open","Close","Volume")
-      z <- xts(z[,2:6],order.by=z[,1])
-    }
-  },error=function(e) warning(e))
-  z
 }
 
 .getTickData <- function(tz)
