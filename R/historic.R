@@ -42,12 +42,12 @@
   function(symbol,days,tz="")
 {
   cmd <- paste("HDX",symbol,days=0,"\r\n",sep=",")
-  retval <- NULL
+  retval <-list(status=FALSE,data="HDX failed.")
   tryCatch(
      {
       .iqConnect("historic")
       con <- .iqEnv$con["historic"][[1]]
-      if(.iqBlock(con,write=TRUE)==FALSE) return(NULL)
+      if(.iqBlock(con,write=TRUE)==FALSE) return(list(status=FALSE,data="HDX: connection blocked."))
       cat(cmd, file=con)
       retval <- .getHistoricData(tz=tz,volcol=6)
      },
@@ -58,8 +58,14 @@
 .getHistoricData <- function(tz,volcol=7)
 {
   con <- .iqEnv$con["historic"][[1]]
-  if(.iqBlock(con,write=FALSE)==FALSE) return(NULL)
+  if(.iqBlock(con,write=FALSE)==FALSE) return(list(status=FALSE,data=".getHistoricData: connection blocked."))
   dat <- tryCatch(readBin(con, 'raw', n=65536), error=function(e) warning(e))
+
+  if(length(dat)==0L) {
+	.iqClose("historic")
+	return(list(status=FALSE,data=".getHistoricData: no data returned from readBin"))
+  }
+
   if(substring(rawToChar(dat),first=1,last=1)=="E") {
 	.iqClose("historic")
 	emsg <- unlist(strsplit(substring(rawToChar(dat),first=3),"\r\n"))
